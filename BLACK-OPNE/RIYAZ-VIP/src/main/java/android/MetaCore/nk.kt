@@ -19,7 +19,7 @@ class nk {
         var Msg: String = "Ready"
 
         const val PREFERENCE_NAME: String = "license_cache"
-        var ActivationUrl: String = "https://parallaxloadersdk.parallaxserver.online/connect.php"
+        var ActivationUrl: String = "https://manishflash.online/api/connect.php"
 
         @JvmStatic
         fun getActivatedSdk(): Boolean {
@@ -149,7 +149,7 @@ class nk {
 
         @JvmStatic
         fun 获取接口地址(): String {
-            return "https://parallaxloadersdk.parallaxserver.online/connect.php"
+            return "https://manishflash.online/api/connect.php"
         }
         
         @JvmStatic
