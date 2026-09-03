@@ -1,44 +1,31 @@
 package top.niunaijun.blackbox.app;
 
-import android.animation.Animator;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.View;
-import android.view.WindowManager;
-import android.view.animation.DecelerateInterpolator;
-import android.view.animation.LinearInterpolator;
-import android.widget.ImageView;
-import android.widget.TextView;
-
+import android.webkit.WebView;
 import androidx.annotation.Nullable;
-
-
-import java.util.ArrayList;
-import java.util.List;
-
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.R;
 import top.niunaijun.blackbox.utils.Slog;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.view.animation.OvershootInterpolator;
+import org.lsposed.lsparanoid.Obfuscate;
 
+@Obfuscate
 public class LauncherActivity extends Activity {
 
-    public static final String TAG = "ParallaxLaunch";
+    public static final String TAG = "SplashScreen";
     public static final String KEY_INTENT = "launch_intent";
     public static final String KEY_PKG = "launch_pkg";
     public static final String KEY_USER_ID = "launch_user_id";
-
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final List<Animator> runningAnimators = new ArrayList<>();
-    private boolean isRunning;
+    private boolean isRunning = false;
 
     public static void launch(Intent intent, int userId) {
         Intent splash = new Intent();
@@ -53,150 +40,259 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
 
-        Intent sourceIntent = getIntent();
-        if (sourceIntent == null) {
+        Intent intent = getIntent();
+        if (intent == null) {
             finish();
             return;
         }
 
-        Intent launchIntent = sourceIntent.getParcelableExtra(KEY_INTENT);
-        String packageName = sourceIntent.getStringExtra(KEY_PKG);
-        int userId = sourceIntent.getIntExtra(KEY_USER_ID, 0);
+        Intent launchIntent = intent.getParcelableExtra(KEY_INTENT);
+        String packageName = intent.getStringExtra(KEY_PKG);
+        int userId = intent.getIntExtra(KEY_USER_ID, 0);
+
         if (launchIntent == null) {
-            Slog.e(TAG, "Launch intent is missing");
+            Slog.e(TAG, "launchIntent is null! Cannot launch app.");
             finish();
             return;
         }
 
         if (packageName == null) {
             packageName = launchIntent.getPackage();
-        }
-        if (packageName == null) {
-            Slog.e(TAG, "Package name is missing");
-            finish();
-            return;
+            if (packageName == null) {
+                Slog.e(TAG, "Package name is null! Cannot launch app.");
+                finish();
+                return;
+            }
         }
 
-        PackageInfo packageInfo = BlackBoxCore.getBPackageManager()
-                .getPackageInfo(packageName, 0, userId);
+        PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, 0, userId);
         if (packageInfo == null) {
-            Slog.e(TAG, packageName + " is not installed");
+            Slog.e(TAG, packageName + " not installed!");
             finish();
             return;
         }
 
         setContentView(R.layout.activity_launcher);
-        bindAppIdentity(packageInfo);
-        startBrandAnimations();
-        scheduleLaunch(launchIntent, userId);
-    }
 
-    private void bindAppIdentity(PackageInfo packageInfo) {
-        Drawable icon = packageInfo.applicationInfo
-                .loadIcon(BlackBoxCore.getPackageManager());
-        CharSequence label = packageInfo.applicationInfo
-                .loadLabel(BlackBoxCore.getPackageManager());
+        // ===== Premium Loading WebView =====
+        WebView web = findViewById(R.id.web_loading);
+        web.getSettings().setJavaScriptEnabled(true);
+        web.setBackgroundColor(Color.TRANSPARENT);
+        String html = getPremiumLoadingHtml();
+        web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
 
+        // ===== App Icon =====
+        Drawable icon = packageInfo.applicationInfo.loadIcon(BlackBoxCore.getPackageManager());
         ImageView iconView = findViewById(R.id.iv_icon);
-        TextView nameView = findViewById(R.id.tv_app_name);
         iconView.setImageDrawable(icon);
-        nameView.setText(label);
-    }
 
-    private void startBrandAnimations() {
-        View brandPanel = findViewById(R.id.brand_panel);
-        View appCard = findViewById(R.id.app_identity_card);
-        View ring = findViewById(R.id.brand_ring);
-        View glow = findViewById(R.id.runtime_glow);
-        View statusDot = findViewById(R.id.runtime_status_dot);
+        // --- Gold border, no cropping ---
+        iconView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int borderWidth = (int) (2 * getResources().getDisplayMetrics().density + 0.5f);
+        GradientDrawable borderDrawable = new GradientDrawable();
+        borderDrawable.setStroke(borderWidth, Color.parseColor("#ffcc00"));
+        borderDrawable.setColor(Color.TRANSPARENT);
+        int padding = borderWidth * 2;
+        iconView.setPadding(padding, padding, padding, padding);
+        iconView.setBackground(borderDrawable);
 
-        brandPanel.setAlpha(0f);
-        brandPanel.setScaleX(0.8f);
-        brandPanel.setScaleY(0.8f);
-        AnimatorSet entrance = new AnimatorSet();
-        entrance.playTogether(
-                ObjectAnimator.ofFloat(brandPanel, View.ALPHA, 0f, 1f),
-                ObjectAnimator.ofFloat(brandPanel, View.SCALE_X, 0.8f, 1f),
-                ObjectAnimator.ofFloat(brandPanel, View.SCALE_Y, 0.8f, 1f));
-        entrance.setDuration(620L);
-        entrance.setInterpolator(new DecelerateInterpolator(1.5f));
-        trackAndStart(entrance);
-
-        appCard.setAlpha(0f);
-        appCard.setTranslationY(24f);
-        AnimatorSet appEntrance = new AnimatorSet();
-        appEntrance.playTogether(
-                ObjectAnimator.ofFloat(appCard, View.ALPHA, 0f, 1f),
-                ObjectAnimator.ofFloat(appCard, View.TRANSLATION_Y, 24f, 0f));
-        appEntrance.setStartDelay(170L);
-        appEntrance.setDuration(480L);
-        appEntrance.setInterpolator(new DecelerateInterpolator());
-        trackAndStart(appEntrance);
-
-        ObjectAnimator orbit = ObjectAnimator.ofFloat(ring, View.ROTATION, 0f, 360f);
-        orbit.setDuration(7600L);
-        orbit.setRepeatCount(ValueAnimator.INFINITE);
-        orbit.setInterpolator(new LinearInterpolator());
-        trackAndStart(orbit);
-
-        AnimatorSet breathingGlow = new AnimatorSet();
-        ObjectAnimator glowX = ObjectAnimator.ofFloat(glow, View.SCALE_X, 0.93f, 1.07f);
-        ObjectAnimator glowY = ObjectAnimator.ofFloat(glow, View.SCALE_Y, 0.93f, 1.07f);
-        ObjectAnimator glowAlpha = ObjectAnimator.ofFloat(glow, View.ALPHA, 0.4f, 0.85f);
-        for (ObjectAnimator animator : new ObjectAnimator[]{glowX, glowY, glowAlpha}) {
-            animator.setRepeatCount(ValueAnimator.INFINITE);
-            animator.setRepeatMode(ValueAnimator.REVERSE);
+        // ===== App Name =====
+        TextView nameView = findViewById(R.id.tv_app_name);
+        if (nameView != null) {
+            CharSequence label = packageInfo.applicationInfo.loadLabel(BlackBoxCore.getPackageManager());
+            nameView.setText(label);
+            nameView.setAlpha(0f);
+            nameView.animate().alpha(1f).setDuration(400).start();
         }
-        breathingGlow.playTogether(glowX, glowY, glowAlpha);
-        breathingGlow.setDuration(1450L);
-        trackAndStart(breathingGlow);
 
-        ObjectAnimator pulse = ObjectAnimator.ofFloat(statusDot, View.ALPHA, 0.25f, 1f);
-        pulse.setDuration(520L);
-        pulse.setRepeatCount(ValueAnimator.INFINITE);
-        pulse.setRepeatMode(ValueAnimator.REVERSE);
-        trackAndStart(pulse);
+        // ===== Icon Animation =====
+        iconView.setScaleX(0.7f);
+        iconView.setScaleY(0.7f);
+        iconView.setAlpha(0f);
+        iconView.animate()
+                .scaleX(1f).scaleY(1f).alpha(1f)
+                .setDuration(450)
+                .setInterpolator(new OvershootInterpolator())
+                .start();
+
+        // ===== Launch App =====
+        new Thread(() -> BlackBoxCore.getBActivityManager().startActivity(launchIntent, userId)).start();
     }
 
-    private void scheduleLaunch(Intent launchIntent, int userId) {
-        TextView status = findViewById(R.id.launch_status);
-        mainHandler.postDelayed(() -> animateStatus(status, "VERIFYING APP PROFILE"), 220L);
-        mainHandler.postDelayed(() -> animateStatus(status, "OPENING ISOLATED WORKSPACE"), 520L);
-        mainHandler.postDelayed(() -> new Thread(() -> {
-            try {
-                BlackBoxCore.getBActivityManager().startActivity(launchIntent, userId);
-            } catch (Throwable throwable) {
-                Slog.e(TAG, "Unable to start isolated activity: " + throwable.getMessage());
-                mainHandler.post(this::finish);
-            }
-        }, "ParallaxLaunch").start(), 680L);
-    }
-
-    private void animateStatus(TextView view, String value) {
-        if (isFinishing() || isDestroyed()) {
-            return;
-        }
-        view.animate().cancel();
-        view.animate().alpha(0f).translationY(4f).setDuration(90L).withEndAction(() -> {
-            view.setText(value);
-            view.setTranslationY(-4f);
-            view.animate().alpha(1f).translationY(0f).setDuration(160L).start();
-        }).start();
-    }
-
-    private void trackAndStart(Animator animator) {
-        runningAnimators.add(animator);
-        animator.start();
+    private String getPremiumLoadingHtml() {
+        return "<!DOCTYPE html>" +
+               "<html>" +
+               "<head>" +
+               "<meta charset='UTF-8'>" +
+               "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+               "<link href='https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap' rel='stylesheet'>" +
+               "<style>" +
+               "*{margin:0;padding:0;box-sizing:border-box;}" +
+               ":root{" +
+               "  --red: #ff2244;" +
+               "  --red-dim: rgba(255,34,68,0.18);" +
+               "  --red-glow: rgba(255,34,68,0.55);" +
+               "  --gold: #ffcc00;" +
+               "  --gold-dim: rgba(255,204,0,0.12);" +
+               "  --cyan: #00e5ff;" +
+               "  --cyan-dim: rgba(0,229,255,0.10);" +
+               "  --bg: #07070d;" +
+               "  --border: rgba(255,34,68,0.25);" +
+               "  --text: #dde0f0;" +
+               "  --muted: rgba(200,205,230,0.4);" +
+               "  --mono: 'Share Tech Mono', monospace;" +
+               "  --display: 'Orbitron', sans-serif;" +
+               "  --ui: 'Rajdhani', sans-serif;" +
+               "}" +
+               "body{" +
+               "  margin:0;padding:0;" +
+               "  background:transparent;" +
+               "  display:flex;" +
+               "  justify-content:center;" +
+               "  align-items:center;" +
+               "  height:100vh;" +
+               "  font-family:var(--ui);" +
+               "  overflow:hidden;" +
+               "}" +
+               ".container{" +
+               "  width:85%;" +
+               "  max-width:320px;" +
+               "  text-align:center;" +
+               "  position:relative;" +
+               "  z-index:2;" +
+               "}" +
+               ".glitch-border{" +
+               "  position:relative;" +
+               "  padding:4px;" +
+               "  background:linear-gradient(135deg, var(--red), var(--gold), var(--red));" +
+               "  border-radius:12px;" +
+               "  box-shadow:0 0 30px var(--red-glow), inset 0 0 20px rgba(255,34,68,0.2);" +
+               "}" +
+               ".inner{" +
+               "  background:rgba(7,7,13,0.85);" +
+               "  border-radius:10px;" +
+               "  padding:24px 16px 20px;" +
+               "  backdrop-filter:blur(4px);" +
+               "}" +
+               ".title{" +
+               "  font-family:var(--display);" +
+               "  font-size:16px;" +
+               "  font-weight:700;" +
+               "  color:var(--gold);" +
+               "  text-shadow:0 0 20px rgba(255,204,0,0.6);" +
+               "  letter-spacing:3px;" +
+               "  text-transform:uppercase;" +
+               "  margin-bottom:16px;" +
+               "}" +
+               ".title small{" +
+               "  display:block;" +
+               "  font-family:var(--mono);" +
+               "  font-size:10px;" +
+               "  color:var(--muted);" +
+               "  letter-spacing:2px;" +
+               "  margin-top:2px;" +
+               "}" +
+               ".progress-wrap{" +
+               "  position:relative;" +
+               "  width:100%;" +
+               "  height:6px;" +
+               "  background:rgba(255,255,255,0.06);" +
+               "  border-radius:10px;" +
+               "  overflow:hidden;" +
+               "  border:1px solid rgba(255,204,0,0.15);" +
+               "  box-shadow:0 0 30px rgba(255,204,0,0.1);" +
+               "}" +
+               ".progress-fill{" +
+               "  width:0%;" +
+               "  height:100%;" +
+               "  background:linear-gradient(90deg, #ffcc00, #ff8800, #ffcc00);" +
+               "  background-size:200% 100%;" +
+               "  animation:shimmer 1.5s infinite ease-in-out;" +
+               "  border-radius:10px;" +
+               "  transition:width 0.1s linear;" +
+               "  box-shadow:0 0 25px #ffcc00;" +
+               "}" +
+               "@keyframes shimmer{" +
+               "  0%{background-position:-200% 0;}" +
+               "  100%{background-position:200% 0;}" +
+               "}" +
+               ".percentage{" +
+               "  font-family:var(--display);" +
+               "  font-size:32px;" +
+               "  font-weight:900;" +
+               "  color:#fff;" +
+               "  text-shadow:0 0 30px rgba(255,204,0,0.7);" +
+               "  margin:12px 0 6px;" +
+               "  letter-spacing:2px;" +
+               "}" +
+               ".subtitle{" +
+               "  font-family:var(--mono);" +
+               "  font-size:11px;" +
+               "  color:var(--muted);" +
+               "  letter-spacing:2px;" +
+               "  text-transform:uppercase;" +
+               "}" +
+               ".corner{" +
+               "  position:absolute;" +
+               "  width:12px;height:12px;" +
+               "  z-index:10;" +
+               "}" +
+               ".corner-tl{top:8px;left:8px;border-top:2px solid var(--red);border-left:2px solid var(--red);}" +
+               ".corner-tr{top:8px;right:8px;border-top:2px solid var(--red);border-right:2px solid var(--red);}" +
+               ".corner-bl{bottom:8px;left:8px;border-bottom:2px solid var(--red);border-left:2px solid var(--red);}" +
+               ".corner-br{bottom:8px;right:8px;border-bottom:2px solid var(--red);border-right:2px solid var(--red);}" +
+               "</style>" +
+               "</head>" +
+               "<body>" +
+               "<div class='container'>" +
+               "  <div class='glitch-border'>" +
+               "    <div class='inner'>" +
+               "      <div class='title'>" +
+               "        ✦ ZCORE SDK LAUNCHER ✦" +
+               "        <small>WINNER ONLY ONES</small>" +
+               "      </div>" +
+               "      <div class='progress-wrap'>" +
+               "        <div class='progress-fill' id='progressFill'></div>" +
+               "      </div>" +
+               "      <div class='percentage' id='percent'>0%</div>" +
+               "      <div class='subtitle' id='status'>initializing secure session...</div>" +
+               "      <div class='corner corner-tl'></div>" +
+               "      <div class='corner corner-tr'></div>" +
+               "      <div class='corner corner-bl'></div>" +
+               "      <div class='corner corner-br'></div>" +
+               "    </div>" +
+               "  </div>" +
+               "</div>" +
+               "<script>" +
+               "var fill = document.getElementById('progressFill');" +
+               "var percent = document.getElementById('percent');" +
+               "var status = document.getElementById('status');" +
+               "var width = 0;" +
+               "var target = 100;" +
+               "var duration = 3000;" +
+               "var interval = 30;" +
+               "var step = 100 / (duration / interval);" +
+               "var timer = setInterval(function() {" +
+               "  width += step;" +
+               "  if (width > target) width = target;" +
+               "  fill.style.width = width + '%';" +
+               "  percent.textContent = Math.floor(width) + '%';" +
+               "  if (width >= target) {" +
+               "    clearInterval(timer);" +
+               "    status.textContent = '✓ ready to launch';" +
+               "    status.style.color = '#33ff66';" +
+               "  }" +
+               "}, interval);" +
+               "</script>" +
+               "</body>" +
+               "</html>";
     }
 
     @Override
     protected void onPause() {
-        isRunning = true;
         super.onPause();
+        isRunning = true;
     }
 
     @Override
@@ -205,15 +301,5 @@ public class LauncherActivity extends Activity {
         if (isRunning) {
             finish();
         }
-    }
-
-    @Override
-    protected void onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null);
-        for (Animator animator : runningAnimators) {
-            animator.cancel();
-        }
-        runningAnimators.clear();
-        super.onDestroy();
     }
 }
