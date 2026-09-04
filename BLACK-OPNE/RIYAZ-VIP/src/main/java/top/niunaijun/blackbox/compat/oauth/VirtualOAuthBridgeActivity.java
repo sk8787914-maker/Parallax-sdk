@@ -210,6 +210,22 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
     private void launchAuthTab(Uri authUri, String redirectScheme, String provider) {
         try {
+            // Rough Facebook CAPTCHA fix: some game/device combinations clip or
+            // rotate the Auth Tab challenge viewport. Use the real browser surface
+            // for Facebook only; the existing exported callback Activity continues
+            // to validate and relay fbconnect:// redirects.
+            if (facebookFlow) {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, authUri);
+                browserIntent.addCategory(Intent.CATEGORY_BROWSABLE);
+                if (provider != null && !provider.trim().isEmpty()) {
+                    browserIntent.setPackage(provider);
+                }
+                browserIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                startActivityForResult(browserIntent, REQUEST_AUTH_TAB);
+                facebookDiagnostic("full_browser_launch", RESULT_CANCELED, null, null, false);
+                return;
+            }
+
             // This is the wire contract produced by AuthTabIntent.Builder().build()
             // followed by launch(..., redirectScheme). Keeping it dependency-free
             // avoids changing the SDK's AndroidX surface while remaining compatible
