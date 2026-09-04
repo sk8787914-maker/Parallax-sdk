@@ -52,4 +52,34 @@
             </intent-filter>
         </activity>
     </application>
+
+        <intent>
+            <action android:name="android.accounts.AccountAuthenticator" />
+        </intent>
+        <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.TwitterNativeAuthBridgeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="twittersdk" />
+                <data android:scheme="twitterkit" />
+                <data android:scheme="twitter" />
+                <data android:scheme="twitterauth" />
+                <data android:scheme="oauth-twitter" />
+                <data android:scheme="xauth" />
+                <data android:scheme="x" />
+            </intent-filter>
+        </activity>
+
 </manifest>
